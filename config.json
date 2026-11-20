@@ -1,0 +1,17 @@
+{
+  "alert_after_failures": 6,
+  "agendas": [
+    {
+      "id": "dgrec-partidas-titulares-representantes",
+      "name": "Registro Civil · Foreign birth certificates (holder or representative)",
+      "url": "https://sae.mec.gub.uy/sae/agendarReserva/Paso1.xhtml?e=9&a=84",
+      "enabled": true
+    },
+    {
+      "id": "dgrec-partidas-solo-titulares",
+      "name": "Registro Civil · Foreign birth certificates (holder only)",
+      "url": "https://sae.mec.gub.uy/sae/agendarReserva/Paso1.xhtml?e=9&a=82",
+      "enabled": true
+    }
+  ]
+}
