@@ -128,4 +128,5 @@ def test_state_keeps_last_open_slots_after_closing(tmp_path, monkeypatch):
     assert entry["slots"] == []
     assert entry["last_slots"][0]["time"] == "10:00"
     assert entry["last_seen_open"]
+    assert entry["last_open_months"] == ["2026-12", "2027-01"]
     assert entry["name"] == "Agenda A"

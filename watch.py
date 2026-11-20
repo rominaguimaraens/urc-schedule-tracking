@@ -245,6 +245,8 @@ def check_all() -> None:
         if slots and slots != entry.get("last_slots"):
             entry["last_slots"] = slots
             entry["last_seen_open"] = now()
+            months = sorted({s["date"][:7] for s in slots})
+            entry["last_open_months"] = [months[0], months[-1]] if len(months) > 1 else months
 
         if status != entry["status"]:
             if status == OPEN:
