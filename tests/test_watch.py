@@ -12,10 +12,13 @@ CALENDAR_FULL = """
 <span class="error">No hay cupos disponibles</span>
 """
 
+# Same structure as a real SAE page with openings: the "no hay cupos" warning
+# is still in the HTML, just hidden, and the slots are btn-turno buttons.
 CALENDAR_OPEN = """
-<div>Preferencia de horario: Cualquier horario</div>
-<div>Seleccionar día: Diciembre 2026</div>
-<td class="dia-disponible">14</td>
+<li>Agendar reserva</li>
+<div id="form:warnSinCupos" style="display:none"><h4>En la oficina seleccionada no hay cupos disponibles</h4></div>
+<span class="label control-label">Turnos disponibles</span>
+<div id="primeros-turnos"><button id="form:j_idt72:0:j_idt73" class="ui-button btn-lg btn-turno turno-seleccionado" type="submit"><span class="ui-button-text ui-c">Mi&eacute;rcoles 2 de diciembre - 10:00 h</span></button><button class="ui-button btn-lg btn-turno" type="submit"><span class="ui-button-text ui-c">Jueves 3 de diciembre - 9:30 h</span></button><button class="ui-button btn-lg btn-turno" type="submit"><span class="ui-button-text ui-c">Martes 12 de enero - 11:00 h</span></button></div>
 """
 
 ERROR_PAGE = "<html><body>Servicio no disponible</body></html>"
@@ -107,3 +110,22 @@ def test_notify_sends_ntfy_json(monkeypatch):
     assert body["topic"] == "urc-test-topic" and body["priority"] == 5
     assert body["click"] == "https://example.test"
     assert body["actions"][0]["url"] == "https://example.test"
+
+
+def test_open_page_with_hidden_warning_reads_slots():
+    from datetime import date
+    status, slots = watch.read_page(CALENDAR_OPEN, date(2026, 11, 20))
+    assert status == watch.OPEN
+    assert [(s["date"], s["time"]) for s in slots] == [
+        ("2026-12-02", "10:00"), ("2026-12-03", "09:30"), ("2027-01-12", "11:00")
+    ]
+
+
+def test_state_keeps_last_open_slots_after_closing(tmp_path, monkeypatch):
+    _run(tmp_path, monkeypatch, [CALENDAR_FULL, CALENDAR_OPEN, CALENDAR_FULL])
+    entry = json.loads((tmp_path / "state.json").read_text())["a"]
+    assert entry["status"] == "closed"
+    assert entry["slots"] == []
+    assert entry["last_slots"][0]["time"] == "10:00"
+    assert entry["last_seen_open"]
+    assert entry["name"] == "Agenda A"

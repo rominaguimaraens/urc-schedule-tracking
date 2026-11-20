@@ -7,13 +7,15 @@ Usage:
 """
 
 import argparse
+import html as htmllib
 import json
 import os
+import re
 import ssl
 import sys
 import tempfile
 import unicodedata
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import certifi
@@ -31,11 +33,22 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/131.0 Safari/537.36"
 )
 
-# Phrases, without accents and in lower case, used to read the page.
-NO_SLOTS = "no hay cupos disponibles"
-PAGE_MARKERS = ("agendar reserva", "seleccionar dia", "preferencia de horario", NO_SLOTS)
+# Phrases, without accents and in lower case, that show the page is the
+# booking calendar. Note the "no hay cupos disponibles" warning is in the page
+# even when slots exist (just hidden), so it can't decide open vs closed.
+PAGE_MARKERS = ("agendar reserva", "seleccionar dia", "preferencia de horario", "no hay cupos disponibles")
 
 OPEN, CLOSED, UNKNOWN = "open", "closed", "unknown"
+
+MONTEVIDEO = timezone(timedelta(hours=-3))
+MONTHS = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+    "julio": 7, "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10,
+    "noviembre": 11, "diciembre": 12,
+}
+# The first three open slots are buttons with the "btn-turno" class.
+SLOT_BUTTON = re.compile(r'class="[^"]*\bbtn-turno\b[^"]*"[^>]*>\s*<span[^>]*>([^<]+)</span>', re.I)
+SLOT_TEXT = re.compile(r"(\w+)\s+(\d{1,2})\s+de\s+(\w+)\s*-\s*(\d{1,2}):(\d{2})", re.U)
 
 
 # ---------------------------------------------------------------- page reading
@@ -47,14 +60,43 @@ def normalize(text: str) -> str:
     return " ".join(text.lower().split())
 
 
-def read_status(html: str) -> str:
-    """OPEN, CLOSED or UNKNOWN (the page wasn't the calendar we expected)."""
+def parse_slots(page: str, today: date) -> list:
+    """The open slots the page shows (up to three), oldest first.
+    The page has no year, so a date earlier than today means next year."""
+    slots = []
+    for raw in SLOT_BUTTON.findall(page):
+        label = " ".join(htmllib.unescape(raw).split())
+        m = SLOT_TEXT.search(label)
+        if not m:
+            continue
+        _, day, month_name, hour, minute = m.groups()
+        month = MONTHS.get(normalize(month_name))
+        if not month:
+            continue
+        try:
+            when = date(today.year, month, int(day))
+            if when < today - timedelta(days=1):
+                when = date(today.year + 1, month, int(day))
+        except ValueError:
+            continue
+        slots.append({"date": when.isoformat(), "time": f"{int(hour):02d}:{minute}", "label": label})
+    return slots
+
+
+def read_page(html: str, today: date):
+    """(status, slots): OPEN with its slots, CLOSED, or UNKNOWN when the page
+    isn't the calendar we expected."""
+    slots = parse_slots(html, today)
+    if slots:
+        return OPEN, slots
     text = normalize(html)
-    if NO_SLOTS in text:
-        return CLOSED
     if any(marker in text for marker in PAGE_MARKERS):
-        return OPEN
-    return UNKNOWN
+        return CLOSED, []
+    return UNKNOWN, []
+
+
+def read_status(html: str) -> str:
+    return read_page(html, datetime.now(MONTEVIDEO).date())[0]
 
 
 # ------------------------------------------------------------------ networking
@@ -167,14 +209,17 @@ def check_all() -> None:
             continue
         key, name, url = agenda["id"], agenda["name"], agenda["url"]
         entry = state.setdefault(key, {"status": None, "since": None, "failures": 0, "broken_alerted": False})
+        entry["name"] = name
+        entry["url"] = url
 
         try:
-            status = read_status(fetch(session, url))
+            status, slots = read_page(fetch(session, url), datetime.now(MONTEVIDEO).date())
             error = None
         except Exception as exc:  # network errors, HTTP errors, TLS
-            status, error = UNKNOWN, str(exc)
+            status, slots, error = UNKNOWN, [], str(exc)
 
-        print(f"[{now()}] {name}: {status}" + (f" ({error})" if error else ""))
+        print(f"[{now()}] {name}: {status}" + (f" ({error})" if error else "")
+              + "".join(f"\n    {s['date']} {s['time']}" for s in slots))
 
         if status == UNKNOWN:
             entry["failures"] += 1
@@ -193,6 +238,13 @@ def check_all() -> None:
             notify("Watcher is back", f"Reading {name} again.", priority=2, tags=["white_check_mark"])
         entry["failures"] = 0
         entry["broken_alerted"] = False
+
+        # What's open now, plus the last slots ever seen open (shown by the app
+        # as "last open appointments were in <month>" once they run out).
+        entry["slots"] = slots
+        if slots and slots != entry.get("last_slots"):
+            entry["last_slots"] = slots
+            entry["last_seen_open"] = now()
 
         if status != entry["status"]:
             if status == OPEN:
