@@ -208,7 +208,7 @@ def build_email(openings: list) -> tuple:
         )
     html = (
         '<div style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#3a2c31;max-width:520px">'
-        "<p>Hi,</p>"
+        "<p>Hi {{ contact.FIRSTNAME | default : \"there\" }},</p>"
         "<p>Registro Civil just opened appointments to register foreign birth certificates at Uruguay 933. "
         "These are the first open slots:</p>"
         + "".join(blocks) +
