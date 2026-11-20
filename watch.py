@@ -1,9 +1,9 @@
-"""Watches Registro Civil (DGREC) booking agendas and sends a Telegram
-message when appointments open up.
+"""Watches Registro Civil (DGREC) booking agendas and sends a phone
+notification through ntfy when appointments open up.
 
 Usage:
     python watch.py            # check every agenda in config.json once
-    python watch.py --test     # send a test message to Telegram and exit
+    python watch.py --test     # send a test notification and exit
 """
 
 import argparse
@@ -115,26 +115,29 @@ def fetch(session: requests.Session, url: str) -> str:
     return r.text
 
 
-# -------------------------------------------------------------------- telegram
+# ------------------------------------------------------------------------ ntfy
 
-def send_telegram(text: str) -> None:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        print("Telegram keys missing, message not sent:\n" + text)
+def notify(title: str, message: str, priority: int = 3, tags=(), url: str = None) -> None:
+    """Send a push notification to everyone subscribed to the ntfy topic.
+    Priority: 1 (min) to 5 (urgent)."""
+    topic = os.environ.get("NTFY_TOPIC")
+    server = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+    if not topic:
+        print(f"NTFY_TOPIC missing, notification not sent:\n{title}\n{message}")
         return
-    r = requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        },
-        timeout=20,
-    )
+    payload = {
+        "topic": topic,
+        "title": title,
+        "message": message,
+        "priority": priority,
+        "tags": list(tags),
+    }
+    if url:
+        payload["click"] = url
+        payload["actions"] = [{"action": "view", "label": "Open calendar", "url": url}]
+    r = requests.post(server, json=payload, timeout=20)
     if not r.ok:
-        print(f"Telegram error {r.status_code}: {r.text}")
+        print(f"ntfy error {r.status_code}: {r.text}")
 
 
 # ----------------------------------------------------------------------- state
@@ -176,25 +179,32 @@ def check_all() -> None:
         if status == UNKNOWN:
             entry["failures"] += 1
             if entry["failures"] >= fail_limit and not entry["broken_alerted"]:
-                send_telegram(
-                    f"⚠️ <b>Watcher can't read the page</b>\n{name}\n"
-                    f"{entry['failures']} checks in a row failed. Check it by hand:\n{url}"
+                notify(
+                    "Watcher can't read the page",
+                    f"{name}\n{entry['failures']} checks in a row failed. Check it by hand.",
+                    priority=4,
+                    tags=["warning"],
+                    url=url,
                 )
                 entry["broken_alerted"] = True
             continue
 
         if entry["broken_alerted"]:
-            send_telegram(f"✅ Watcher is reading <b>{name}</b> again.")
+            notify("Watcher is back", f"Reading {name} again.", priority=2, tags=["white_check_mark"])
         entry["failures"] = 0
         entry["broken_alerted"] = False
 
         if status != entry["status"]:
             if status == OPEN:
-                send_telegram(
-                    f"🟢 <b>Appointments open!</b>\n{name}\n\nBook now:\n{url}"
+                notify(
+                    "Appointments open!",
+                    f"{name}\nTap to book before they're gone.",
+                    priority=5,
+                    tags=["green_circle", "calendar"],
+                    url=url,
                 )
             elif entry["status"] == OPEN:
-                send_telegram(f"🔴 {name}: no appointments left again.")
+                notify("No appointments left", f"{name}\nThe calendar is full again.", priority=3, tags=["red_circle"])
             entry["status"] = status
             entry["since"] = now()
 
@@ -203,11 +213,11 @@ def check_all() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--test", action="store_true", help="send a test Telegram message")
+    parser.add_argument("--test", action="store_true", help="send a test notification")
     args = parser.parse_args()
 
     if args.test:
-        send_telegram("👋 Test from the URC agenda watcher. Alerts will arrive here.")
+        notify("Test notification", "The URC agenda watcher can reach this phone.", tags=["wave"])
         return 0
 
     check_all()

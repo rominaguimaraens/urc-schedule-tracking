@@ -1,6 +1,6 @@
 # URC schedule tracking
 
-Checks the Registro Civil booking calendars every 10 minutes and sends a Telegram message the moment appointments open up, so nobody has to refresh the page by hand.
+Checks the Registro Civil booking calendars every 10 minutes and sends a phone notification (through [ntfy](https://ntfy.sh)) the moment appointments open up, so nobody has to refresh the page by hand.
 
 Currently watching the agendas for **inscripción de partidas extranjeras** (registering foreign birth certificates at Uruguay 933):
 
@@ -9,23 +9,24 @@ Currently watching the agendas for **inscripción de partidas extranjeras** (reg
 | `a=84` | The certificate holder or a representative (parents booking for their kids) |
 | `a=82` | The certificate holder only (can add spouse and kids to the same appointment) |
 
-## What you get on Telegram
+## What you get
 
-- **Appointments open!** with the booking link, once per opening
-- **No appointments left again** when they're gone
-- **Watcher can't read the page** if six checks in a row fail (site down, page changed), plus a message when it recovers
+- **Appointments open!** (urgent priority) with a button that opens the calendar, once per opening
+- **No appointments left** when they're gone
+- **Watcher can't read the page** if six checks in a row fail (site down, page changed), plus a quiet message when it recovers
+
+Everyone subscribed to the topic gets the same notifications, on Android or iPhone.
 
 ## Setup
 
-1. **Make the bot.** In Telegram, message `@BotFather`, send `/newbot`, pick a name. Copy the token it gives you.
-2. **Get your chat ID.** Send any message to your new bot, then open
-   `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and copy the number under `"chat":{"id": ...}`.
-   To get alerts in a group instead, add the bot to the group, send a message there, and use that chat's ID (it starts with `-`).
-3. **Add the secrets.** In this repo: Settings → Secrets and variables → Actions → New repository secret:
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_CHAT_ID`
-4. **Test it.** Actions → Watch agendas → Run workflow → tick *Only send a test Telegram message*. You should get a hello message.
-5. Run it once more without the tick to do a real check. After that it runs by itself.
+1. **Pick a topic name.** Anything long and hard to guess, like `urc-agenda-k7q2m9xv4p`. Anyone who knows the name can read the alerts, so don't make it obvious.
+2. **Add it as a secret.** In this repo: Settings → Secrets and variables → Actions → New repository secret, name `NTFY_TOPIC`, value your topic name.
+3. **Subscribe on each phone.** Install **ntfy** (Play Store or App Store), tap **+**, type the topic name, keep the default server (`ntfy.sh`), subscribe.
+4. **Make the opening alert loud.** In the app, open the topic → settings → set notifications to make sound/vibrate even for urgent alerts, and on Android allow ntfy to ignore battery optimization so alerts arrive instantly.
+5. **Test it.** Actions → Watch agendas → Run workflow → tick *Only send a test notification*. Every subscribed phone should buzz.
+6. Run it once more without the tick to do a real check. After that it runs by itself.
+
+Self-hosting ntfy is optional: add an `NTFY_SERVER` secret with your server's URL and subscribe to that server in the app instead.
 
 ## Adding or pausing agendas
 
@@ -43,8 +44,8 @@ Everything lives in `config.json`. Any public calendar on `sae.mec.gub.uy` (or o
 ```bash
 pip install -r requirements.txt
 python watch.py          # one check
-python watch.py --test   # test message
+python watch.py --test   # test notification
 python -m pytest tests
 ```
 
-Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` as environment variables first, otherwise messages are just printed.
+Set `NTFY_TOPIC` as an environment variable first, otherwise notifications are just printed.

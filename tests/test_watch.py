@@ -59,7 +59,7 @@ def test_unrelated_page_is_unknown():
 
 
 def _run(tmp_path, monkeypatch, pages):
-    """Run check_all once per page in `pages`, collecting Telegram messages."""
+    """Run check_all once per page in `pages`, collecting notification titles."""
     config = {
         "alert_after_failures": 2,
         "agendas": [{"id": "a", "name": "Agenda A", "url": "https://example.test"}],
@@ -69,7 +69,7 @@ def _run(tmp_path, monkeypatch, pages):
     monkeypatch.setattr(watch, "STATE_FILE", tmp_path / "state.json")
 
     sent = []
-    monkeypatch.setattr(watch, "send_telegram", sent.append)
+    monkeypatch.setattr(watch, "notify", lambda title, message, **kw: sent.append((title, kw.get("priority", 3))))
     for page in pages:
         monkeypatch.setattr(watch, "fetch", lambda s, u, p=page: p)
         watch.check_all()
@@ -78,16 +78,32 @@ def _run(tmp_path, monkeypatch, pages):
 
 def test_alerts_once_when_slots_open(tmp_path, monkeypatch):
     sent = _run(tmp_path, monkeypatch, [CALENDAR_FULL, CALENDAR_OPEN, CALENDAR_OPEN])
-    assert len(sent) == 1 and "open" in sent[0].lower()
+    assert sent == [("Appointments open!", 5)]
 
 
 def test_tells_you_when_slots_are_gone(tmp_path, monkeypatch):
     sent = _run(tmp_path, monkeypatch, [CALENDAR_FULL, CALENDAR_OPEN, CALENDAR_FULL])
-    assert len(sent) == 2 and "no appointments left" in sent[1]
+    assert [t for t, _ in sent] == ["Appointments open!", "No appointments left"]
 
 
 def test_warns_once_when_page_breaks_then_recovers(tmp_path, monkeypatch):
     sent = _run(tmp_path, monkeypatch, [CALENDAR_FULL, ERROR_PAGE, ERROR_PAGE, ERROR_PAGE, CALENDAR_FULL])
-    assert len(sent) == 2
-    assert "can't read" in sent[0]
-    assert "again" in sent[1]
+    assert [t for t, _ in sent] == ["Watcher can't read the page", "Watcher is back"]
+
+
+def test_notify_sends_ntfy_json(monkeypatch):
+    calls = []
+
+    class Resp:
+        ok = True
+
+    monkeypatch.setenv("NTFY_TOPIC", "urc-test-topic")
+    monkeypatch.delenv("NTFY_SERVER", raising=False)
+    monkeypatch.setattr(watch.requests, "post", lambda url, json, timeout: calls.append((url, json)) or Resp())
+    watch.notify("Appointments open!", "Agenda A", priority=5, url="https://example.test")
+
+    url, body = calls[0]
+    assert url == "https://ntfy.sh"
+    assert body["topic"] == "urc-test-topic" and body["priority"] == 5
+    assert body["click"] == "https://example.test"
+    assert body["actions"][0]["url"] == "https://example.test"
