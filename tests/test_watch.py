@@ -185,3 +185,10 @@ def test_brevo_key_pinged_once_a_day(monkeypatch):
     watch.keep_brevo_key_alive(state)
     watch.keep_brevo_key_alive(state)
     assert len(calls) == 1 and state["_brevo"]["last_ping"]
+
+
+def test_test_email_is_labelled():
+    agenda = {"name": "X", "short_name": "Holder only", "url": "u"}
+    subject, html = watch.build_email([(agenda, [{"date": "2026-12-02", "time": "10:00"}])], test=True)
+    assert subject.startswith("[TEST]")
+    assert "This is a test" in html

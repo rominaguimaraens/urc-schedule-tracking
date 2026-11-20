@@ -9,6 +9,10 @@ on:
         description: "Only send a test notification"
         type: boolean
         default: false
+      test_email:
+        description: "Only send a test alert email to the whole Brevo list"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -38,7 +42,9 @@ jobs:
           BREVO_LIST_ID: ${{ secrets.BREVO_LIST_ID }}
           BREVO_SENDER_EMAIL: ${{ secrets.BREVO_SENDER_EMAIL }}
         run: |
-          if [ "${{ inputs.test }}" = "true" ]; then
+          if [ "${{ inputs.test_email }}" = "true" ]; then
+            python watch.py --test-email
+          elif [ "${{ inputs.test }}" = "true" ]; then
             python watch.py --test
           else
             python watch.py

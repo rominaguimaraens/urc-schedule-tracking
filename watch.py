@@ -192,10 +192,12 @@ def _slot_line(slot: dict) -> str:
     return f"{when.strftime('%a')} {when.day} {when.strftime('%b')}, {slot['time']}"
 
 
-def build_email(openings: list) -> tuple:
+def build_email(openings: list, test: bool = False) -> tuple:
     """(subject, html) for the subscribers' alert. `openings` is a list of
     (agenda, slots) for every calendar that just opened in this run."""
     subject = "Registro Civil has appointments open"
+    if test:
+        subject = "[TEST] " + subject
     blocks = []
     for agenda, slots in openings:
         label = htmllib.escape(agenda.get("short_name", agenda["name"]))
@@ -208,7 +210,9 @@ def build_email(openings: list) -> tuple:
         )
     html = (
         '<div style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#3a2c31;max-width:520px">'
-        "<p>Hi {{ contact.FIRSTNAME | default : \"there\" }},</p>"
+        + ('<p style="padding:10px 14px;background:#FFDCE4;border-radius:8px"><strong>This is a test.</strong> '
+           "The dates below are examples, not real openings.</p>" if test else "")
+        + "<p>Hi {{ contact.FIRSTNAME | default : \"there\" }},</p>"
         "<p>Registro Civil just opened appointments to register foreign birth certificates at Uruguay 933. "
         "These are the first open slots:</p>"
         + "".join(blocks) +
@@ -225,7 +229,7 @@ def build_email(openings: list) -> tuple:
     return subject, html
 
 
-def email_subscribers(openings: list) -> None:
+def email_subscribers(openings: list, test: bool = False) -> None:
     """Send one alert email to the Brevo list. Does nothing until the
     BREVO_API_KEY, BREVO_LIST_ID and BREVO_SENDER_EMAIL secrets exist."""
     key = os.environ.get("BREVO_API_KEY")
@@ -235,13 +239,13 @@ def email_subscribers(openings: list) -> None:
         if openings:
             print("Brevo not configured, alert email not sent.")
         return
-    subject, html = build_email(openings)
+    subject, html = build_email(openings, test)
     headers = {"api-key": key, "accept": "application/json", "content-type": "application/json"}
     r = requests.post(
         f"{BREVO_API}/emailCampaigns",
         headers=headers,
         json={
-            "name": f"Registro Civil alert {now()}",
+            "name": f"{'TEST ' if test else ''}Registro Civil alert {now()}",
             "subject": subject,
             "sender": {"name": "Uruguay Relocation Companion", "email": sender},
             "htmlContent": html,
@@ -385,7 +389,20 @@ def check_all() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--test", action="store_true", help="send a test notification")
+    parser.add_argument("--test-email", action="store_true",
+                        help="send a sample alert email to the whole Brevo list")
     args = parser.parse_args()
+
+    if args.test_email:
+        config = load_json(CONFIG_FILE, {})
+        agenda = config["agendas"][0]
+        today = datetime.now(MONTEVIDEO).date()
+        sample = [
+            {"date": (today + timedelta(days=d)).isoformat(), "time": t}
+            for d, t in ((12, "10:00"), (13, "09:30"), (20, "11:00"))
+        ]
+        email_subscribers([(agenda, sample)], test=True)
+        return 0
 
     if args.test:
         notify("Test notification", "The URC agenda watcher can reach this phone.", tags=["wave"])
