@@ -171,3 +171,17 @@ def test_email_creates_and_sends_campaign(monkeypatch):
     watch.email_subscribers([({"name": "X", "url": "u"}, [{"date": "2026-12-02", "time": "10:00"}])])
     assert calls[0][1]["recipients"] == {"listIds": [7]}
     assert calls[1][0].endswith("/emailCampaigns/42/sendNow")
+
+
+def test_brevo_key_pinged_once_a_day(monkeypatch):
+    monkeypatch.setenv("BREVO_API_KEY", "k")
+    calls = []
+
+    class Resp:
+        ok, status_code, text = True, 200, ""
+
+    monkeypatch.setattr(watch.requests, "get", lambda *a, **k: calls.append(a) or Resp())
+    state = {}
+    watch.keep_brevo_key_alive(state)
+    watch.keep_brevo_key_alive(state)
+    assert len(calls) == 1 and state["_brevo"]["last_ping"]

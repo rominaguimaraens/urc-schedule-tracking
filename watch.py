@@ -257,6 +257,41 @@ def email_subscribers(openings: list) -> None:
     print("Alert email sent." if r.ok else f"Brevo send error {r.status_code}: {r.text}")
 
 
+def keep_brevo_key_alive(state: dict) -> None:
+    """Brevo disables API keys after 90 days without use, and alerts can be
+    months apart. Once a day, make one harmless read so the key stays active."""
+    key = os.environ.get("BREVO_API_KEY")
+    if not key:
+        return
+    today = datetime.now(MONTEVIDEO).date().isoformat()
+    meta = state.setdefault("_brevo", {})
+    if meta.get("last_ping") == today:
+        return
+    try:
+        r = requests.get(
+            f"{BREVO_API}/emailCampaigns",
+            headers={"api-key": key, "accept": "application/json"},
+            params={"limit": 1},
+            timeout=30,
+        )
+        if r.ok:
+            meta["last_ping"] = today
+        else:
+            print(f"Brevo key check failed {r.status_code}: {r.text[:200]}")
+            if r.status_code in (401, 403) and not meta.get("key_alerted"):
+                notify(
+                    "Brevo key isn't working",
+                    "Alert emails can't be sent. Make a new Brevo API key and update BREVO_API_KEY in GitHub.",
+                    priority=4,
+                    tags=["warning"],
+                )
+                meta["key_alerted"] = True
+            return
+        meta.pop("key_alerted", None)
+    except Exception as exc:
+        print(f"Brevo key check error: {exc}")
+
+
 # ----------------------------------------------------------------------- state
 
 def load_json(path: Path, default):
@@ -339,6 +374,7 @@ def check_all() -> None:
             entry["status"] = status
             entry["since"] = now()
 
+    keep_brevo_key_alive(state)
     STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     try:
         email_subscribers(openings)
