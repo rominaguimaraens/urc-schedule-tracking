@@ -6,7 +6,10 @@
     "broken_alerted": false,
     "last_open_months": [
       "2027-02"
-    ]
+    ],
+    "name": "Registro Civil · Foreign birth certificates (holder or representative)",
+    "url": "https://sae.mec.gub.uy/sae/agendarReserva/Paso1.xhtml?e=9&a=84",
+    "slots": []
   },
   "dgrec-partidas-solo-titulares": {
     "status": "closed",
@@ -15,6 +18,12 @@
     "broken_alerted": false,
     "last_open_months": [
       "2027-02"
-    ]
+    ],
+    "name": "Registro Civil · Foreign birth certificates (holder only)",
+    "url": "https://sae.mec.gub.uy/sae/agendarReserva/Paso1.xhtml?e=9&a=82",
+    "slots": []
+  },
+  "_brevo": {
+    "last_ping": "2026-11-20"
   }
 }
