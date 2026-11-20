@@ -33,7 +33,7 @@ USER_AGENT = (
 
 # Phrases, without accents and in lower case, used to read the page.
 NO_SLOTS = "no hay cupos disponibles"
-PAGE_MARKERS = ("seleccionar dia", "preferencia de horario", NO_SLOTS)
+PAGE_MARKERS = ("agendar reserva", "seleccionar dia", "preferencia de horario", NO_SLOTS)
 
 OPEN, CLOSED, UNKNOWN = "open", "closed", "unknown"
 

@@ -20,6 +20,27 @@ CALENDAR_OPEN = """
 
 ERROR_PAGE = "<html><body>Servicio no disponible</body></html>"
 
+# What the real a=84 page says when it's full (Nov 2026).
+REAL_FULL = """
+<h1>Inscripción de partidas extranjeras titulares o representantes</h1>
+<li>Agendar reserva</li><li>Datos necesarios</li>
+<span>En la oficina seleccionada no hay cupos disponibles</span>
+<span>A la brevedad se añadirán cupos</span>
+"""
+
+ACCESS_DENIED = """
+<h2>Acceso denegado</h2>
+<p>No tiene acceso al recurso solicitado o éste no existe</p>
+"""
+
+
+def test_real_full_page_is_closed():
+    assert watch.read_status(REAL_FULL) == watch.CLOSED
+
+
+def test_access_denied_is_unknown():
+    assert watch.read_status(ACCESS_DENIED) == watch.UNKNOWN
+
 
 def test_full_calendar_is_closed():
     assert watch.read_status(CALENDAR_FULL) == watch.CLOSED
