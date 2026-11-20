@@ -182,6 +182,81 @@ def notify(title: str, message: str, priority: int = 3, tags=(), url: str = None
         print(f"ntfy error {r.status_code}: {r.text}")
 
 
+# ----------------------------------------------------------------------- email
+
+BREVO_API = "https://api.brevo.com/v3"
+
+
+def _slot_line(slot: dict) -> str:
+    when = date.fromisoformat(slot["date"])
+    return f"{when.strftime('%a')} {when.day} {when.strftime('%b')}, {slot['time']}"
+
+
+def build_email(openings: list) -> tuple:
+    """(subject, html) for the subscribers' alert. `openings` is a list of
+    (agenda, slots) for every calendar that just opened in this run."""
+    subject = "Registro Civil has appointments open"
+    blocks = []
+    for agenda, slots in openings:
+        label = htmllib.escape(agenda.get("short_name", agenda["name"]))
+        items = "".join(f"<li>{htmllib.escape(_slot_line(s))}</li>" for s in slots)
+        link = htmllib.escape(agenda["url"], quote=True)
+        blocks.append(
+            f'<p style="margin:20px 0 6px"><strong>{label}</strong></p>'
+            f'<ul style="margin:0 0 8px;padding-left:20px">{items}</ul>'
+            f'<p style="margin:0"><a href="{link}" style="color:#5734A0;font-weight:600">Book this calendar</a></p>'
+        )
+    html = (
+        '<div style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#3a2c31;max-width:520px">'
+        "<p>Hi,</p>"
+        "<p>Registro Civil just opened appointments to register foreign birth certificates at Uruguay 933. "
+        "These are the first open slots:</p>"
+        + "".join(blocks) +
+        '<p style="margin-top:24px">Spots usually go fast, so if your documents are ready '
+        "(apostilled, and translated by a Uruguayan sworn translator), book as soon as you can. "
+        "The booking costs $U 1.436, can\u2019t be refunded, and has to be paid within 48 hours.</p>"
+        '<p>Romina<br>Uruguay Relocation Companion<br>'
+        '<a href="https://relocationuy.com" style="color:#5734A0">relocationuy.com</a></p>'
+        '<p style="font-size:12px;color:#5F4D53;margin-top:28px">You\u2019re getting this because you signed up '
+        "for Registro Civil alerts on dnm.relocationuy.com. "
+        '<a href="{{ unsubscribe }}" style="color:#5F4D53">Unsubscribe</a></p>'
+        "</div>"
+    )
+    return subject, html
+
+
+def email_subscribers(openings: list) -> None:
+    """Send one alert email to the Brevo list. Does nothing until the
+    BREVO_API_KEY, BREVO_LIST_ID and BREVO_SENDER_EMAIL secrets exist."""
+    key = os.environ.get("BREVO_API_KEY")
+    list_id = os.environ.get("BREVO_LIST_ID")
+    sender = os.environ.get("BREVO_SENDER_EMAIL")
+    if not (key and list_id and sender and openings):
+        if openings:
+            print("Brevo not configured, alert email not sent.")
+        return
+    subject, html = build_email(openings)
+    headers = {"api-key": key, "accept": "application/json", "content-type": "application/json"}
+    r = requests.post(
+        f"{BREVO_API}/emailCampaigns",
+        headers=headers,
+        json={
+            "name": f"Registro Civil alert {now()}",
+            "subject": subject,
+            "sender": {"name": "Uruguay Relocation Companion", "email": sender},
+            "htmlContent": html,
+            "recipients": {"listIds": [int(list_id)]},
+        },
+        timeout=30,
+    )
+    if not r.ok:
+        print(f"Brevo campaign error {r.status_code}: {r.text}")
+        return
+    campaign_id = r.json()["id"]
+    r = requests.post(f"{BREVO_API}/emailCampaigns/{campaign_id}/sendNow", headers=headers, timeout=30)
+    print("Alert email sent." if r.ok else f"Brevo send error {r.status_code}: {r.text}")
+
+
 # ----------------------------------------------------------------------- state
 
 def load_json(path: Path, default):
@@ -203,6 +278,7 @@ def check_all() -> None:
 
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT, "Accept-Language": "es-UY,es;q=0.9"})
+    openings = []  # calendars that opened in this run, for one combined email
 
     for agenda in config.get("agendas", []):
         if not agenda.get("enabled", True):
@@ -257,12 +333,17 @@ def check_all() -> None:
                     tags=["green_circle", "calendar"],
                     url=url,
                 )
+                openings.append((agenda, slots))
             elif entry["status"] == OPEN:
                 notify("No appointments left", f"{name}\nThe calendar is full again.", priority=3, tags=["red_circle"])
             entry["status"] = status
             entry["since"] = now()
 
     STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    try:
+        email_subscribers(openings)
+    except Exception as exc:  # never let email trouble stop the watcher
+        print(f"Alert email failed: {exc}")
 
 
 def main() -> int:

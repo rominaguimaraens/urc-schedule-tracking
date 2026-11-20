@@ -130,3 +130,44 @@ def test_state_keeps_last_open_slots_after_closing(tmp_path, monkeypatch):
     assert entry["last_seen_open"]
     assert entry["last_open_months"] == ["2026-12", "2027-01"]
     assert entry["name"] == "Agenda A"
+
+
+def test_alert_email_lists_slots_and_unsubscribe():
+    agenda = {"name": "X", "short_name": "Holder only", "url": "https://example.test/a?e=9&a=82"}
+    slots = [{"date": "2026-12-02", "time": "10:00"}, {"date": "2027-01-12", "time": "11:00"}]
+    subject, html = watch.build_email([(agenda, slots)])
+    assert "Registro Civil" in subject
+    assert "Wed 2 Dec, 10:00" in html and "Tue 12 Jan, 11:00" in html
+    assert "{{ unsubscribe }}" in html
+    assert "e=9&amp;a=82" in html
+
+
+def test_email_skipped_without_brevo_keys(monkeypatch, capsys):
+    for k in ("BREVO_API_KEY", "BREVO_LIST_ID", "BREVO_SENDER_EMAIL"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(watch.requests, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no call")))
+    watch.email_subscribers([({"name": "X", "url": "u"}, [{"date": "2026-12-02", "time": "10:00"}])])
+    assert "not configured" in capsys.readouterr().out
+
+
+def test_email_creates_and_sends_campaign(monkeypatch):
+    monkeypatch.setenv("BREVO_API_KEY", "k")
+    monkeypatch.setenv("BREVO_LIST_ID", "7")
+    monkeypatch.setenv("BREVO_SENDER_EMAIL", "contact@relocationuy.com")
+    calls = []
+
+    class Resp:
+        def __init__(self, body=None):
+            self.ok, self._body, self.status_code, self.text = True, body, 200, ""
+
+        def json(self):
+            return self._body
+
+    def post(url, headers=None, json=None, timeout=None):
+        calls.append((url, json))
+        return Resp({"id": 42}) if url.endswith("/emailCampaigns") else Resp()
+
+    monkeypatch.setattr(watch.requests, "post", post)
+    watch.email_subscribers([({"name": "X", "url": "u"}, [{"date": "2026-12-02", "time": "10:00"}])])
+    assert calls[0][1]["recipients"] == {"listIds": [7]}
+    assert calls[1][0].endswith("/emailCampaigns/42/sendNow")

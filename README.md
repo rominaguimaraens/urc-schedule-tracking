@@ -28,6 +28,16 @@ Everyone subscribed to the topic gets the same notifications, on Android or iPho
 
 Self-hosting ntfy is optional: add an `NTFY_SERVER` secret with your server's URL and subscribe to that server in the app instead.
 
+## Email alerts (Brevo)
+
+When a calendar opens, the watcher also emails everyone on a Brevo list (people who signed up on the Registro Civil tab of dnm.relocationuy.com). One email per opening, listing the first slots of every calendar that opened, with an unsubscribe link.
+
+It stays off until these repo secrets exist:
+
+- `BREVO_API_KEY`: Brevo → SMTP & API → API keys
+- `BREVO_LIST_ID`: the number of the "Registro Civil alerts" list
+- `BREVO_SENDER_EMAIL`: a verified Brevo sender, e.g. contact@relocationuy.com
+
 ## Adding or pausing agendas
 
 Everything lives in `config.json`. Any public calendar on `sae.mec.gub.uy` (or other gub.uy agendas built on the same system) works: copy the calendar page URL, add an entry, done. Set `"enabled": false` to pause one without deleting it.
