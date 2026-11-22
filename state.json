@@ -2,7 +2,7 @@
   "dgrec-partidas-titulares-representantes": {
     "status": "closed",
     "since": "2026-11-20 18:35 UTC",
-    "failures": 1,
+    "failures": 0,
     "broken_alerted": false,
     "last_open_months": [
       "2027-02"
@@ -14,7 +14,7 @@
   "dgrec-partidas-solo-titulares": {
     "status": "closed",
     "since": "2026-11-20 18:35 UTC",
-    "failures": 1,
+    "failures": 0,
     "broken_alerted": false,
     "last_open_months": [
       "2027-02"
