@@ -192,3 +192,27 @@ def test_test_email_is_labelled():
     subject, html = watch.build_email([(agenda, [{"date": "2026-12-02", "time": "10:00"}])], test=True)
     assert subject.startswith("[TEST]")
     assert "This is a test" in html
+
+
+def test_discord_off_without_webhook(monkeypatch):
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+    monkeypatch.setattr(watch.requests, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no call")))
+    watch.discord_post("t", "m")
+
+
+def test_discord_open_alert_pings_client_role(tmp_path, monkeypatch):
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.test/hook")
+    monkeypatch.setenv("DISCORD_PING_ROLE_ID", "123")
+    posts = []
+
+    class Resp:
+        ok, status_code, text = True, 204, ""
+
+    monkeypatch.setattr(watch.requests, "post",
+                        lambda url, json=None, timeout=None, **k: posts.append((url, json)) or Resp())
+    _run(tmp_path, monkeypatch, [CALENDAR_FULL, CALENDAR_OPEN, CALENDAR_FULL])
+    hooks = [p for u, p in posts if u == "https://discord.test/hook"]
+    assert [h["embeds"][0]["title"] for h in hooks] == ["Registro Civil appointments are open", "No appointments left"]
+    assert hooks[0]["content"] == "<@&123>" and hooks[0]["allowed_mentions"]["roles"] == ["123"]
+    assert "Wed 2 Dec, 10:00" in hooks[0]["embeds"][0]["description"]
+    assert "content" not in hooks[1] and hooks[1]["allowed_mentions"]["roles"] == []

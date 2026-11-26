@@ -182,6 +182,46 @@ def notify(title: str, message: str, priority: int = 3, tags=(), url: str = None
         print(f"ntfy error {r.status_code}: {r.text}")
 
 
+# --------------------------------------------------------------------- discord
+
+DISCORD_PINK = 0xF77FA7
+DISCORD_PLUM = 0x5F4D53
+
+
+def discord_post(title: str, message: str, color: int = DISCORD_PINK, url: str = None,
+                 ping: bool = False) -> None:
+    """Post an alert in the URC Community #appointment-alerts channel.
+    Does nothing until the DISCORD_WEBHOOK_URL secret exists. When `ping` is
+    set and DISCORD_PING_ROLE_ID exists, that role (Client) gets mentioned."""
+    hook = os.environ.get("DISCORD_WEBHOOK_URL")
+    if not hook:
+        return
+    role = os.environ.get("DISCORD_PING_ROLE_ID", "").strip()
+    embed = {"title": title, "description": message, "color": color}
+    if url:
+        embed["url"] = url
+    payload = {
+        "username": "URC Appointment Alerts",
+        "embeds": [embed],
+        "allowed_mentions": {"parse": [], "roles": [role] if (ping and role) else []},
+    }
+    if ping and role:
+        payload["content"] = f"<@&{role}>"
+    try:
+        r = requests.post(hook, json=payload, timeout=20)
+        if not r.ok:
+            print(f"Discord error {r.status_code}: {r.text[:200]}")
+    except Exception as exc:  # never let Discord trouble stop the watcher
+        print(f"Discord post failed: {exc}")
+
+
+def discord_open_message(agenda: dict, slots: list) -> str:
+    lines = [f"**{agenda.get('short_name', agenda['name'])}**"]
+    lines += [f"• {_slot_line(s)}" for s in slots]
+    lines.append(f"[Open the calendar]({agenda['url']}) and book before they're gone.")
+    return "\n".join(lines)
+
+
 # ----------------------------------------------------------------------- email
 
 BREVO_API = "https://api.brevo.com/v3"
@@ -373,8 +413,13 @@ def check_all() -> None:
                     url=url,
                 )
                 openings.append((agenda, slots))
+                discord_post("Registro Civil appointments are open", discord_open_message(agenda, slots),
+                             url=url, ping=True)
             elif entry["status"] == OPEN:
                 notify("No appointments left", f"{name}\nThe calendar is full again.", priority=3, tags=["red_circle"])
+                discord_post("No appointments left",
+                             f"**{agenda.get('short_name', name)}** is full again. We'll post here as soon as new ones open.",
+                             color=DISCORD_PLUM)
             entry["status"] = status
             entry["since"] = now()
 
@@ -406,6 +451,7 @@ def main() -> int:
 
     if args.test:
         notify("Test notification", "The URC agenda watcher can reach this phone.", tags=["wave"])
+        discord_post("Test alert", "Appointment alerts are connected. Real openings will show up here.")
         return 0
 
     check_all()

@@ -38,6 +38,15 @@ It stays off until these repo secrets exist:
 - `BREVO_LIST_ID`: the number of the "Registro Civil alerts" list
 - `BREVO_SENDER_EMAIL`: a verified Brevo sender, e.g. contact@relocationuy.com
 
+## Discord alerts (URC Community)
+
+When a calendar opens, the watcher also posts in #appointment-alerts on the URC Community server, with the first slots and a link to the calendar, and posts again when it fills up. The test run (*Only send a test notification*) posts a test message there too.
+
+It stays off until these repo secrets exist:
+
+- `DISCORD_WEBHOOK_URL`: Discord → Server Settings → Integrations → Webhooks → the "URC Appointment Alerts" webhook → Copy Webhook URL
+- `DISCORD_PING_ROLE_ID` (optional): the Client role's ID, so openings ping clients. Without it the alert posts quietly.
+
 ## Adding or pausing agendas
 
 Everything lives in `config.json`. Any public calendar on `sae.mec.gub.uy` (or other gub.uy agendas built on the same system) works: copy the calendar page URL, add an entry, done. Set `"enabled": false` to pause one without deleting it.
